@@ -64,7 +64,7 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="AppDomainLogger.cs" />
-    <Compile Include="AssemblUtil.cs" />
+    <Compile Include="AssembleUtil.cs" />
     <Compile Include="ByteBitOperator.cs" />
     <Compile Include="CheckPath.cs" />
     <Compile Include="CommonUtil.cs" />

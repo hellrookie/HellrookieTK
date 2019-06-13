@@ -9,6 +9,7 @@ namespace Hellrookie.ToolKit
 {
     public class ExcelHandler
     {
+        private static readonly System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.SetProperty | System.Reflection.BindingFlags.GetProperty;
         public static Dictionary<string, List<Dictionary<string, Object>>> ReadFromFile(string path)
         {
             Dictionary<string, List<Dictionary<string, Object>>> data = new Dictionary<string, List<Dictionary<string, Object>>>();
@@ -35,29 +36,54 @@ namespace Hellrookie.ToolKit
         {
             path = path.EndsWith(".xls") ? path : path + "-" + DateTime.Now.ToString("yyyyMMddHHmmssfff") + ".xls";
 
-            var props = typeof(T).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.GetProperty | System.Reflection.BindingFlags.Instance);
+            var props = AssembleUtil.GetPorpertyNames<T>(flags);
 
             HSSFWorkbook workbook = new HSSFWorkbook(); 
             ISheet sheet = workbook.CreateSheet(Path.GetFileNameWithoutExtension(path));
-            IRow headRow = sheet.CreateRow(0);
-            for (int i = 0; i < props.Length; i++)
+            
+
+            Dictionary<int, string> valuePos = new Dictionary<int, string>();
+            for(int i = 0; i < props.Count; ++i)
             {
-                headRow.CreateCell(i).SetCellValue(props[i].Name);
+                valuePos.Add(i, props[i]);
             }
+
+            IRow headRow = sheet.CreateRow(0);
+            SetRowValue(headRow, valuePos);
 
             int rowPos = 1;
             foreach(var d in data)
             {
                 var row = sheet.CreateRow(rowPos++);
-                for (int i = 0; i < props.Length; i++)
-                {
-                    SetCellValue(row.CreateCell(i), props[i].GetValue(d, null));
-                }
+                SetRowValue(row, valuePos, AssembleUtil.GetPropertyValues(d, flags));
             }
 
             using (FileStream file = new FileStream(path, FileMode.Create))
             {
                 workbook.Write(file);
+            }
+        }
+
+        private static void SetRowValue(IRow row, Dictionary<int, string> valuePos, Dictionary<string, object> values)
+        {
+            foreach(var p in valuePos.Keys)
+            {
+                if (values.ContainsKey(valuePos[p]))
+                {
+                    SetCellValue(row.CreateCell(p), values[valuePos[p]]);
+                }
+                else
+                {
+                    SetCellValue(row.CreateCell(p), string.Empty);
+                }
+            }
+        }
+
+        private static void SetRowValue(IRow row, Dictionary<int, string> valuePos)
+        {
+            foreach (var p in valuePos.Keys)
+            {
+                SetCellValue(row.CreateCell(p), valuePos[p]);
             }
         }
 
@@ -86,23 +112,7 @@ namespace Hellrookie.ToolKit
             List<Dictionary<string, object>> sheetData = GetSheetData(sheet, true);
             foreach(var d in sheetData)
             {
-                T data = System.Activator.CreateInstance<T>();
-                foreach (var prop in data.GetType().GetProperties(System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.SetProperty | System.Reflection.BindingFlags.GetProperty))
-                {
-                    if(d.ContainsKey(prop.Name.ToLower()))
-                    {
-                        if (d[prop.Name.ToLower()].GetType().Equals(prop.PropertyType))
-                        {
-                            prop.SetValue(data, d[prop.Name.ToLower()], null);
-                        }
-                        else
-                        {
-                            Console.WriteLine(string.Format("The type for the values are not match, data name: {0}, type need: {1}, type in file: {2}", prop.Name, prop.PropertyType, d[prop.Name].GetType()));
-                            continue;
-                        }
-                    }
-                }
-                formattedData.Add(data);
+                formattedData.Add(AssembleUtil.SetPorpertyValues<T>(d, flags));
             }
             return formattedData;
         }

@@ -2,23 +2,22 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
-using System.Reflection;
 using System.Text;
 
 namespace Hellrookie.ToolKit
 {
     public class CsvHandler
     {
+        private static readonly System.Reflection.BindingFlags flags = System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.GetProperty | System.Reflection.BindingFlags.Instance;
         public static void WriteToFile<T>(string path, IEnumerable<T> datas)
         {
             path = path.EndsWith(".csv") ? path : path + ".csv";
-            var props = typeof(T).GetProperties(System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.GetProperty | System.Reflection.BindingFlags.Instance);
             using (StreamWriter sw = new StreamWriter(path, false, Encoding.UTF8))
             {
-                sw.WriteLine(GetHeaderString(props));
+                sw.WriteLine(GetHeaderString<T>());
                 foreach(var d in datas)
                 {
-                    sw.WriteLine(GetValueString(props, d));
+                    sw.WriteLine(GetValueString(d));
                 }
             }
         }
@@ -32,25 +31,21 @@ namespace Hellrookie.ToolKit
                 while (!sr.EndOfStream)
                 {
                     var line = sr.ReadLine();
-                    var values = line.Split(',');
-                    result.Add(SetValueToObj<T>(props, values.Select(v => { return v.Trim('\"'); }).ToList()));
+                    var tempValues = line.Split(',');
+                    Dictionary<string, object> values = new Dictionary<string, object>();
+                    for(int i = 0; i < props.Count; ++i)
+                    {
+                        values[props[i]] = tempValues[i].Trim('\"');
+                    }
+                    result.Add(SetValueToObj<T>(values));
                 }
             }
             return result;
         }
 
-        private static T SetValueToObj<T>(List<string> propNames, List<string> values)
+        private static T SetValueToObj<T>(Dictionary<string, object> values)
         {
-            T obj = Activator.CreateInstance<T>();
-            Dictionary<string, PropertyInfo> objPorps = (typeof(T).GetProperties(BindingFlags.Instance | BindingFlags.Public | BindingFlags.SetProperty | BindingFlags.GetProperty)).ToDictionary(p => p.Name, p=>p);
-            for(int i = 0; i < propNames.Count(); ++i)
-            {
-                if(objPorps.ContainsKey(propNames[i]))
-                {
-                    objPorps[propNames[i]].SetValue(obj, values[i], null);
-                }
-            }
-            return obj;
+            return AssembleUtil.SetPorpertyValues<T>(values, flags);
         }
 
         private static List<string> GetPropertyNames(string headerLine)
@@ -58,27 +53,29 @@ namespace Hellrookie.ToolKit
             return new List<string>(headerLine.Split(',').Select(h => { return h.Trim('\"'); }));
         }
 
-        private static string GetHeaderString(IEnumerable<PropertyInfo> props)
+        private static string GetHeaderString<T>()
         {
             StringBuilder header = new StringBuilder();
+            var props = AssembleUtil.GetPorpertyNames<T>(flags);
             foreach(var p in props)
             {
-                header.AppendFormat("{0},", p.Name);
+                header.AppendFormat("{0},", p);
             }
             return header.ToString().TrimEnd(',');
         }
 
-        private static string GetValueString<T>(IEnumerable<PropertyInfo> props, T data)
+        private static string GetValueString<T>(T data)
         {
             StringBuilder value = new StringBuilder();
-            foreach (var p in props)
+            var objValues = AssembleUtil.GetPropertyValues(data, flags);
+            foreach (var v in objValues.Values)
             {
-                var tempValue = p.GetValue(data, null).ToString();
-                if(tempValue.Contains(","))
+                var temp = v.ToString();
+                if(temp.Contains(",") || temp.Contains(" "))
                 {
-                    tempValue = string.Format("\"{0}\"", tempValue);
+                    temp = string.Format("\"{0}\"", v);
                 }
-                value.AppendFormat("{0},", tempValue);
+                value.AppendFormat("{0},", temp);
             }
             return value.ToString().TrimEnd(',');
         }
